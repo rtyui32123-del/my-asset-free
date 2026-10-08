@@ -688,9 +688,11 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
       $('meta').textContent = dateK(last.date) + ' 기준' + (hasStock && last.px ? ' · 환율 ' + fxs(last.px.fx) + '원/$' : '');
       if (hasStock) {
         const lp = S.prices[S.prices.length - 1], ago = lp ? dayDiff(lp.date, today()) : null;
-        $('weekPill').innerHTML = !lp ? '<span class="pill warn">시세 없음</span>'
+        $('weekPill').innerHTML = (S.refreshing ? '<span class="pill warn">시세 가져오는 중</span>'
+          : !lp ? '<span class="pill warn">시세 없음</span>'
           : ago <= 2 ? '<span class="pill ok">✓ 시세 ' + dateS(lp.date) + ' 반영</span>'
-          : '<span class="pill warn">시세 ' + ago + '일 전</span>';
+          : '<span class="pill warn">시세 ' + ago + '일 전</span>')
+          + (S.local ? '<button class="btn small ghost" data-act="refreshHome" type="button"' + (S.refreshing ? ' disabled' : '') + '>지금 갱신</button>' : '');
       } else {
         const ls = S.snaps[S.snaps.length - 1], ago = dayDiff(ls.date, today());
         const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
@@ -1017,7 +1019,12 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
         if (used) await db.doc('accounts/' + a.id).update({ archived: true }); else await db.doc('accounts/' + a.id).delete();
       }
     }, '항목을 저장했습니다.');
-    if (ok) $('dlgManage').close();
+    if (ok) {
+      $('dlgManage').close();
+      /* 새 티커가 생겼으면 앱을 다시 열 때까지 기다리지 않고 바로 시세를 가져온다 */
+      const lp = S.prices[S.prices.length - 1], have = lp && lp.prices ? lp.prices : {};
+      if (S.local && S.accounts.some(a => a.ticker && !a.archived && !(a.ticker in have))) refreshMarket(true);
+    }
   });
 
   /* ── 항목별 추가·차감 ── */
@@ -1169,7 +1176,7 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
     if (!S.local || S.refreshing) return;
     const tickers = [...new Set(S.accounts.filter(a => a.ticker && !a.archived).map(a => a.ticker))];
     if (!tickers.length) return;
-    S.refreshing = true;
+    S.refreshing = true; render();
     const date = today(), lp = S.prices[S.prices.length - 1] || null, cur = S.prices.find(x => x.date === date) || null;
     const live = { at: Date.now(), fx: false, missing: [], noKey: false, skipped: false };
     try {
@@ -1256,6 +1263,10 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
     else if (act === 'adjSign') { S.adj.sign = Number(b.dataset.v); adjSum(); }
     else if (act === 'allRows') { S.allRows = !S.allRows; render(); }
     else if (act === 'data') { $('importInfo').textContent = ''; $('importText').value = ''; $('importFile').value = ''; $('dlgData').showModal(); }
+    else if (act === 'refreshHome') {
+      if (S.refreshing) return;
+      await refreshMarket(true); toast(liveSummary() || '시세를 갱신했습니다.');
+    }
     else if (act === 'refreshNow') {
       LS.set('finnhubKey', $('mk-key').value.trim());
       $('liveInfo').textContent = '가져오는 중입니다.';
