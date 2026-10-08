@@ -1001,6 +1001,8 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
     ev.preventDefault(); readManage();
     const rows = S.manage.filter(r => r.name.trim());
     const keep = new Set(rows.map(r => r.id)), map = accMap();
+    /* 기기 저장소는 저장 즉시 S.accounts를 갱신하므로, 방금 만든 항목이 "목록에 없는 항목"으로 지워지지 않도록 저장 전 목록을 쓴다 */
+    const existing = S.accounts.slice();
     const ok = await write(async db => {
       let i = 0;
       for (const r of rows) {
@@ -1009,7 +1011,7 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
         else if (old.name !== name || old.cat !== r.cat || old.order !== i || (old.ticker || '') !== ticker) await db.doc('accounts/' + r.id).update({ name, cat: r.cat, order: i, ticker });
         i++;
       }
-      for (const a of S.accounts) {
+      for (const a of existing) {
         if (a.archived || keep.has(a.id)) continue;
         const used = S.snaps.some(s => s.values && a.id in s.values);
         if (used) await db.doc('accounts/' + a.id).update({ archived: true }); else await db.doc('accounts/' + a.id).delete();
